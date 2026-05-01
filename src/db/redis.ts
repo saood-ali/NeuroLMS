@@ -16,7 +16,7 @@ export const createRedisConnection = () => {
 
 export const connectRedis = async (): Promise<void> => {
   try {
-    await redisClient.connect();
+    await redisClient.ping();
     console.log('Successfully connected to Redis');
   } catch (error) {
     console.error('Error connecting to Redis:', error);

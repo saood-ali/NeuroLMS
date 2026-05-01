@@ -6,6 +6,7 @@ import mongoSanitize from 'express-mongo-sanitize';
 import { env } from './config/env';
 import routes from './routes';
 import { notFoundHandler, errorHandler } from './middlewares/error.middleware';
+import { globalLimiter } from './middlewares/rateLimit';
 
 const app = express();
 
@@ -21,7 +22,7 @@ app.use(cookieParser());
 app.use(mongoSanitize());
 
 // Routes
-app.use('/api/v1', routes);
+app.use('/api/v1', globalLimiter, routes);
 
 // Error handling
 app.use(notFoundHandler);
