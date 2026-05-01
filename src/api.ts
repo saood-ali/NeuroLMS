@@ -1,12 +1,16 @@
 import app from './app';
+import { env } from './config/env';
+import { connectMongo } from './db/mongo';
 
-const PORT = process.env.PORT || 3000;
+const PORT = env.PORT || 3000;
 
 if (require.main === module) {
-  const server = app.listen(PORT, () => {
-    console.log(`API running on port ${PORT}`);
-    if (process.env.DEV_EXIT_AFTER_START === 'true') {
-      server.close(() => process.exit(0));
-    }
+  connectMongo().then(() => {
+    const server = app.listen(PORT, () => {
+      console.log(`API running on port ${PORT}`);
+      if (process.env.DEV_EXIT_AFTER_START === 'true') {
+        server.close(() => process.exit(0));
+      }
+    });
   });
 }
