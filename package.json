@@ -25,6 +25,7 @@
   },
   "homepage": "https://github.com/saood-ali/NeuroLMS#readme",
   "dependencies": {
+    "bullmq": "^5.76.4",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "ioredis": "^5.10.1",
