@@ -19,7 +19,11 @@ app.use(cors({
 app.use(express.json({ limit: '16kb' }));
 app.use(express.urlencoded({ extended: true, limit: '16kb' }));
 app.use(cookieParser());
-app.use(mongoSanitize());
+app.use((req, res, next) => {
+  if (req.body) req.body = mongoSanitize.sanitize(req.body);
+  if (req.params) req.params = mongoSanitize.sanitize(req.params);
+  next();
+});
 
 import { csrfProtection } from './middlewares/csrf.middleware';
 app.use(csrfProtection);
