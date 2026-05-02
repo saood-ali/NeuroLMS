@@ -22,4 +22,5 @@ export const globalLimiter = createRateLimiter({
   limit: 100, // Limit each IP to 100 requests per `window`
   standardHeaders: 'draft-7', // combined `RateLimit` header
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  skip: (req) => req.originalUrl.startsWith('/api/v1/health'),
 });

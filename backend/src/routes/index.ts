@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import healthRoutes from './health.routes';
 
 const router = Router();
 
-// Health check endpoint
-router.get('/health/live', (req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
+// Health endpoints
+router.use('/health', healthRoutes);
 
 // Auth endpoints
 router.use('/auth', authRoutes);
