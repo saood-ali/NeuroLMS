@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Course, ICourse, CoursePricing, CourseLevel } from '../models/Course';
 import { Category } from '../models/Category';
+import { AuditLog } from '../models/AuditLog';
 import { ApiError } from '../utils/ApiError';
 
 interface CreateCourseData {
@@ -190,5 +191,125 @@ export class CourseService {
     ]);
 
     await Course.findByIdAndDelete(courseId);
+  }
+
+  // ─── Admin Moderation ───────────────────────────────────────────────────────
+
+  static async takedownCourse(adminId: string, courseId: string): Promise<ICourse> {
+    const course = await Course.findById(courseId);
+    if (!course) throw new ApiError(404, 'Course not found');
+
+    if (course.state === 'takendown') return course;
+
+    course.state = 'takendown';
+    course.takenDownAt = new Date();
+    course.takenDownBy = new mongoose.Types.ObjectId(adminId);
+    await course.save();
+
+    await AuditLog.create({
+      adminId: new mongoose.Types.ObjectId(adminId),
+      actionType: 'course_takedown',
+      targetType: 'course',
+      targetId: new mongoose.Types.ObjectId(courseId),
+      metadata: { title: course.title },
+    });
+
+    return course;
+  }
+
+  static async adminDeleteCourse(adminId: string, courseId: string): Promise<void> {
+    const course = await Course.findById(courseId);
+    if (!course) throw new ApiError(404, 'Course not found');
+
+    const db = mongoose.connection.db;
+    if (!db) throw new ApiError(500, 'Database connection not established');
+
+    const cid = new mongoose.Types.ObjectId(courseId);
+
+    // Cascading deletions — same as instructor delete but bypasses enrollment check
+    await Promise.all([
+      db.collection('lectures').deleteMany({ courseId: cid }),
+      db.collection('lectureChunks').deleteMany({ courseId: cid }),
+      db.collection('qaHistory').deleteMany({ courseId: cid }),
+      db.collection('enrollments').deleteMany({ courseId: cid }),
+      db.collection('reviews').deleteMany({ courseId: cid }),
+      db.collection('wishlists').updateMany({}, { $pull: { courseIds: cid } } as any),
+      db.collection('lectureProgress').deleteMany({ courseId: cid }),
+      db.collection('liveClasses').deleteMany({ courseId: cid }),
+      db.collection('courseViewHistory').deleteMany({ courseId: cid }),
+    ]);
+
+    await AuditLog.create({
+      adminId: new mongoose.Types.ObjectId(adminId),
+      actionType: 'course_remove',
+      targetType: 'course',
+      targetId: cid,
+      metadata: { title: course.title },
+    });
+
+    await Course.findByIdAndDelete(courseId);
+  }
+
+  static async featureCourse(adminId: string, courseId: string): Promise<ICourse> {
+    const course = await Course.findById(courseId);
+    if (!course) throw new ApiError(404, 'Course not found');
+
+    if (course.state !== 'published') {
+      throw new ApiError(400, 'Only published courses can be featured');
+    }
+
+    course.isFeatured = true;
+    course.featuredAt = new Date();
+    course.featuredBy = new mongoose.Types.ObjectId(adminId);
+    await course.save();
+
+    await AuditLog.create({
+      adminId: new mongoose.Types.ObjectId(adminId),
+      actionType: 'course_feature',
+      targetType: 'course',
+      targetId: new mongoose.Types.ObjectId(courseId),
+      metadata: { title: course.title },
+    });
+
+    return course;
+  }
+
+  static async unfeatureCourse(adminId: string, courseId: string): Promise<ICourse> {
+    const course = await Course.findById(courseId);
+    if (!course) throw new ApiError(404, 'Course not found');
+
+    course.isFeatured = false;
+    await course.save();
+
+    await AuditLog.create({
+      adminId: new mongoose.Types.ObjectId(adminId),
+      actionType: 'course_unfeature',
+      targetType: 'course',
+      targetId: new mongoose.Types.ObjectId(courseId),
+      metadata: { title: course.title },
+    });
+
+    return course;
+  }
+
+  static async listAllCourses(page: number = 1, limit: number = 10): Promise<{ items: ICourse[], total: number }> {
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      Course.find().sort({ createdAt: -1 }).skip(skip).limit(limit).populate('instructorId', 'name email'),
+      Course.countDocuments(),
+    ]);
+    return { items, total };
+  }
+
+  static async listInstructorCourses(instructorId: string, page: number = 1, limit: number = 10, state?: string): Promise<{ items: ICourse[], total: number }> {
+    const query: any = { instructorId: new mongoose.Types.ObjectId(instructorId) };
+    if (state) query.state = state;
+
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      Course.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Course.countDocuments(query),
+    ]);
+    return { items, total };
   }
 }

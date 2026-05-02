@@ -57,3 +57,13 @@ export const deleteCourse = asyncHandler(async (req: Request, res: Response) => 
   await CourseService.deleteCourse(user._id.toString(), id);
   res.status(200).json(new ApiResponse(null, 'Course deleted'));
 });
+
+export const getInstructorCourses = asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const state = req.query.state as string;
+
+  const result = await CourseService.listInstructorCourses(user._id.toString(), page, limit, state);
+  res.status(200).json(new ApiResponse(result, 'Instructor courses fetched'));
+});
