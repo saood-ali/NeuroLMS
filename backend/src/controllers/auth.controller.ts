@@ -48,3 +48,46 @@ export const logoutUser = asyncHandler(async (req: Request, res: Response) => {
   clearAuthCookies(res);
   res.status(200).json(new ApiResponse(null, 'Logged out'));
 });
+
+export const googleSignIn = asyncHandler(async (req: Request, res: Response) => {
+  const { idToken } = req.body;
+  if (!idToken) {
+    throw new ApiError(400, 'Missing Google ID Token');
+  }
+
+  const { user, accessToken, refreshToken } = await AuthService.googleSignIn(idToken);
+  setAuthCookies(res, accessToken, refreshToken);
+
+  res.status(200).json(new ApiResponse({ user }, 'Logged in successfully'));
+});
+
+export const resendVerificationEmail = asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user) {
+    throw new ApiError(401, 'Unauthorized');
+  }
+
+  if (user.emailVerified) {
+    throw new ApiError(409, 'Email is already verified');
+  }
+
+  await AuthService.sendEmailVerificationOtp(user._id.toString(), user.email);
+
+  res.status(200).json(new ApiResponse(null, 'Verification OTP sent'));
+});
+
+export const submitVerificationEmail = asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user) {
+    throw new ApiError(401, 'Unauthorized');
+  }
+
+  const { otp } = req.body;
+  if (!otp) {
+    throw new ApiError(400, 'Missing OTP');
+  }
+
+  const updatedUser = await AuthService.verifyEmailOtp(user._id.toString(), otp);
+
+  res.status(200).json(new ApiResponse({ emailVerified: updatedUser.emailVerified }, 'Email verified'));
+});

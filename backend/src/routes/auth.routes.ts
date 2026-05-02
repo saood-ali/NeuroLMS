@@ -1,7 +1,15 @@
 import { Router } from 'express';
 import { generateCsrfToken } from '../middlewares/csrf.middleware';
 import { authenticate } from '../middlewares/auth.middleware';
-import { registerUser, loginUser, refreshSession, logoutUser } from '../controllers/auth.controller';
+import { 
+  registerUser, 
+  loginUser, 
+  refreshSession, 
+  logoutUser,
+  googleSignIn,
+  resendVerificationEmail,
+  submitVerificationEmail
+} from '../controllers/auth.controller';
 import { ApiResponse } from '../utils/ApiResponse';
 
 const router = Router();
@@ -13,7 +21,10 @@ router.get('/csrf-token', (req, res) => {
 
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+router.post('/google', googleSignIn);
 router.post('/refresh', refreshSession);
 router.post('/logout', authenticate, logoutUser);
+router.post('/verify-email/resend', authenticate, resendVerificationEmail);
+router.post('/verify-email', authenticate, submitVerificationEmail);
 
 export default router;
