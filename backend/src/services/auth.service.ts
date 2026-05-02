@@ -175,4 +175,84 @@ export class AuthService {
     
     return user;
   }
+
+  static async forgotPassword(email: string): Promise<void> {
+    const user = await User.findOne({ email });
+    if (!user) return; // Prevent enumeration
+
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const key = `otp:password-reset:${user._id}`;
+    
+    await redisClient.setex(key, 900, otp); // 15 mins
+    
+    await sendEmail({
+      to: email,
+      subject: 'Reset your password',
+      html: emailTemplates.passwordResetOtp(otp),
+      type: 'password_reset_otp',
+      userId: user._id.toString()
+    });
+  }
+
+  static async resetPassword(email: string, otp: string, newPassword: string): Promise<void> {
+    const user = await User.findOne({ email }).select('+tokenVersion +refreshTokenHash');
+    if (!user) {
+      throw new ApiError(400, 'Invalid request');
+    }
+
+    const key = `otp:password-reset:${user._id}`;
+    const storedOtp = await redisClient.get(key);
+    
+    if (!storedOtp) {
+      throw new ApiError(410, 'OTP expired or not found');
+    }
+    
+    if (storedOtp !== otp) {
+      throw new ApiError(400, 'Invalid OTP');
+    }
+    
+    user.passwordHash = newPassword; // Will be hashed by pre-save hook
+    user.refreshTokenHash = undefined; // Invalidate current refresh token
+    user.tokenVersion += 1; // Invalidate all current access tokens
+    await user.save();
+    
+    await redisClient.del(key);
+
+    await sendEmail({
+      to: email,
+      subject: 'Password Reset Successful',
+      html: emailTemplates.passwordResetConfirmation(),
+      type: 'password_reset_confirmation',
+      userId: user._id.toString()
+    });
+  }
+
+  static async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await User.findById(userId).select('+passwordHash +tokenVersion +refreshTokenHash');
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    if (!user.passwordHash) {
+      throw new ApiError(404, 'No password set on this account. Please use forgot password.');
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      throw new ApiError(401, 'Incorrect current password');
+    }
+
+    user.passwordHash = newPassword;
+    user.refreshTokenHash = undefined;
+    user.tokenVersion += 1;
+    await user.save();
+
+    await sendEmail({
+      to: user.email,
+      subject: 'Password Changed',
+      html: emailTemplates.passwordChangeConfirmation(),
+      type: 'password_change_confirmation',
+      userId: user._id.toString()
+    });
+  }
 }

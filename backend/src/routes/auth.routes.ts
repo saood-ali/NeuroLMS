@@ -8,7 +8,9 @@ import {
   logoutUser,
   googleSignIn,
   resendVerificationEmail,
-  submitVerificationEmail
+  submitVerificationEmail,
+  forgotPassword,
+  resetPassword
 } from '../controllers/auth.controller';
 import { ApiResponse } from '../utils/ApiResponse';
 
@@ -26,5 +28,7 @@ router.post('/refresh', refreshSession);
 router.post('/logout', authenticate, logoutUser);
 router.post('/verify-email/resend', authenticate, resendVerificationEmail);
 router.post('/verify-email', authenticate, submitVerificationEmail);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 export default router;

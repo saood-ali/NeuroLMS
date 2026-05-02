@@ -91,3 +91,27 @@ export const submitVerificationEmail = asyncHandler(async (req: Request, res: Re
 
   res.status(200).json(new ApiResponse({ emailVerified: updatedUser.emailVerified }, 'Email verified'));
 });
+
+export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { email } = req.body;
+  if (!email) {
+    throw new ApiError(400, 'Missing email');
+  }
+
+  await AuthService.forgotPassword(email);
+
+  res.status(200).json(new ApiResponse(null, 'If the email exists, an OTP has been sent'));
+});
+
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { email, otp, newPassword } = req.body;
+  if (!email || !otp || !newPassword) {
+    throw new ApiError(400, 'Missing required fields');
+  }
+
+  await AuthService.resetPassword(email, otp, newPassword);
+
+  clearAuthCookies(res);
+
+  res.status(200).json(new ApiResponse(null, 'Password reset successful'));
+});
