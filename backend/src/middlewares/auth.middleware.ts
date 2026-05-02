@@ -46,6 +46,41 @@ export const authenticate = asyncHandler(async (req: Request, res: Response, nex
   }
 });
 
+export const optionalAuthenticate = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const token = req.cookies?.accessToken || req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = verifyAccessToken(token);
+
+    const user = await User.findById(decoded.userId).select('+tokenVersion');
+    if (user && user.accountState !== 'banned' && user.tokenVersion === decoded.tokenVersion) {
+      req.user = user;
+    }
+    // If invalid for any reason, we just continue without setting req.user (since it's optional auth)
+    // Wait, API_Contracts usually requires 401 if token is present but invalid. Let's make it strict if present.
+    if (!user) {
+      throw new ApiError(401, 'User associated with token no longer exists');
+    }
+    if (user.accountState === 'banned') {
+      throw new ApiError(401, 'Account is banned');
+    }
+    if (user.tokenVersion !== decoded.tokenVersion) {
+      throw new ApiError(401, 'Session is invalid or expired');
+    }
+
+    next();
+  } catch (error: any) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(401, 'Invalid or expired token');
+  }
+});
+
 export const requireRole = (...roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {

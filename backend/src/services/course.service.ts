@@ -22,6 +22,20 @@ interface UpdateCourseData {
   priceAmount?: number;
 }
 
+export interface SearchCourseParams {
+  q?: string;
+  categoryId?: string;
+  level?: string;
+  pricing?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minRating?: number;
+  sortBy?: 'createdAt' | 'averageRating' | 'priceAmount';
+  sortDir?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
 export class CourseService {
   static async createCourse(instructorId: string, data: CreateCourseData): Promise<ICourse> {
     if (!data.title || !data.description || !data.categoryId || !data.level || !data.pricing) {
@@ -290,6 +304,82 @@ export class CourseService {
     });
 
     return course;
+  }
+
+  static async searchCourses(params: SearchCourseParams, userId?: string): Promise<{ items: any[], total: number }> {
+    const query: any = { state: 'published' };
+
+    if (params.q) {
+      query.$text = { $search: params.q };
+    }
+    if (params.categoryId) {
+      query.categoryId = new mongoose.Types.ObjectId(params.categoryId);
+    }
+    if (params.level) {
+      query.level = params.level;
+    }
+    if (params.pricing) {
+      query.pricing = params.pricing;
+    }
+    if (params.minPrice !== undefined || params.maxPrice !== undefined) {
+      query.priceAmount = {};
+      if (params.minPrice !== undefined) query.priceAmount.$gte = params.minPrice;
+      if (params.maxPrice !== undefined) query.priceAmount.$lte = params.maxPrice;
+    }
+    if (params.minRating !== undefined) {
+      query.averageRating = { $gte: params.minRating };
+    }
+
+    let sort: any = {};
+    if (params.q) {
+      // If text search, sort by score first, then user's sort if any
+      sort = { score: { $meta: 'textScore' } };
+    }
+
+    if (params.sortBy) {
+      sort[params.sortBy] = params.sortDir === 'desc' ? -1 : 1;
+    } else if (!params.q) {
+      sort.createdAt = -1; // Default sort if no text search
+    }
+
+    const page = params.page || 1;
+    const limit = params.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const findOptions = params.q ? { score: { $meta: 'textScore' } } : {};
+
+    const [courses, total] = await Promise.all([
+      Course.find(query, findOptions)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate('instructorId', 'name email')
+        .populate('categoryId', 'name')
+        .lean(),
+      Course.countDocuments(query),
+    ]);
+
+    const items = courses.map(c => {
+      const { _id, __v, ...rest } = c as any;
+      return { id: _id.toString(), ...rest, isEnrolled: false };
+    });
+
+    if (userId && items.length > 0) {
+      const db = mongoose.connection.db;
+      if (db) {
+        const courseIds = items.map(c => new mongoose.Types.ObjectId(c.id));
+        const enrollments = await db.collection('enrollments')
+          .find({ userId: new mongoose.Types.ObjectId(userId), courseId: { $in: courseIds } })
+          .toArray();
+
+        const enrolledSet = new Set(enrollments.map(e => e.courseId.toString()));
+        for (const item of items) {
+          item.isEnrolled = enrolledSet.has(item.id);
+        }
+      }
+    }
+
+    return { items, total };
   }
 
   static async listAllCourses(page: number = 1, limit: number = 10): Promise<{ items: ICourse[], total: number }> {

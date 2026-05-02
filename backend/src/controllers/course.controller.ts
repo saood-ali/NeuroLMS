@@ -67,3 +67,25 @@ export const getInstructorCourses = asyncHandler(async (req: Request, res: Respo
   const result = await CourseService.listInstructorCourses(user._id.toString(), page, limit, state);
   res.status(200).json(new ApiResponse(result, 'Instructor courses fetched'));
 });
+
+export const searchCourses = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?._id?.toString();
+  const params: any = {
+    q: req.query.q as string,
+    categoryId: req.query.categoryId as string,
+    level: req.query.level as string,
+    pricing: req.query.pricing as string,
+    sortBy: req.query.sortBy as string,
+    sortDir: req.query.sortDir as string,
+    page: parseInt(req.query.page as string) || 1,
+    limit: parseInt(req.query.limit as string) || 20,
+  };
+
+  if (req.query.minPrice) params.minPrice = parseInt(req.query.minPrice as string);
+  if (req.query.maxPrice) params.maxPrice = parseInt(req.query.maxPrice as string);
+  if (req.query.minRating) params.minRating = parseFloat(req.query.minRating as string);
+
+  const result = await CourseService.searchCourses(params, userId);
+  res.status(200).json(new ApiResponse(result, 'Courses fetched'));
+});
+
