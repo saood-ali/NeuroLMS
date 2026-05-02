@@ -89,3 +89,27 @@ export const searchCourses = asyncHandler(async (req: Request, res: Response) =>
   res.status(200).json(new ApiResponse(result, 'Courses fetched'));
 });
 
+// ─── Discovery Endpoints (T-026) ─────────────────────────────────────────────
+
+export const getFeaturedCourses = asyncHandler(async (req: Request, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const result = await CourseService.getFeaturedCourses(page, limit);
+  res.status(200).json(new ApiResponse(result, 'Featured courses fetched'));
+});
+
+export const getTrendingCourses = asyncHandler(async (req: Request, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const result = await CourseService.getTrendingCourses(page, limit);
+  res.status(200).json(new ApiResponse(result, 'Trending courses fetched'));
+});
+
+export const getRecommendedCourses = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!._id.toString();
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const result = await CourseService.getRecommendedCourses(userId, page, limit);
+  res.status(200).json(new ApiResponse(result, 'Recommended courses fetched'));
+});
+

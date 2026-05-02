@@ -382,6 +382,155 @@ export class CourseService {
     return { items, total };
   }
 
+  // ─── Discovery Endpoints (T-026) ─────────────────────────────────────────────
+
+  static async getFeaturedCourses(page: number = 1, limit: number = 10): Promise<{ items: any[], total: number }> {
+    const skip = (page - 1) * limit;
+    const query: any = { state: 'published', isFeatured: true };
+
+    const [courses, total] = await Promise.all([
+      Course.find(query)
+        .sort({ featuredAt: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('instructorId', 'name email')
+        .populate('categoryId', 'name')
+        .lean(),
+      Course.countDocuments(query),
+    ]);
+
+    const items = courses.map(c => {
+      const { _id, __v, ...rest } = c as any;
+      return { id: _id.toString(), ...rest, isEnrolled: false };
+    });
+
+    return { items, total };
+  }
+
+  static async getTrendingCourses(page: number = 1, limit: number = 10): Promise<{ items: any[], total: number }> {
+    const skip = (page - 1) * limit;
+    const db = mongoose.connection.db;
+    let trendingCourseIds: string[] = [];
+
+    if (db) {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const recentEnrollments = await db.collection('enrollments').aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { _id: "$courseId", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: limit + skip } // Fetch enough to paginate
+      ]).toArray();
+
+      trendingCourseIds = recentEnrollments.map(e => e._id.toString());
+    }
+
+    let query: any = { state: 'published' };
+    let sort: any = { enrollmentCount: -1, averageRating: -1 };
+
+    // If we have recent enrollments, prioritize them
+    if (trendingCourseIds.length > 0) {
+      query = { state: 'published', _id: { $in: trendingCourseIds.map(id => new mongoose.Types.ObjectId(id)) } };
+    }
+
+    let [courses, total] = await Promise.all([
+      Course.find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate('instructorId', 'name email')
+        .populate('categoryId', 'name')
+        .lean(),
+      Course.countDocuments(query),
+    ]);
+
+    // If no recent enrollments, fallback to all-time top
+    if (courses.length === 0 && trendingCourseIds.length === 0) {
+      query = { state: 'published' };
+      [courses, total] = await Promise.all([
+        Course.find(query)
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate('instructorId', 'name email')
+          .populate('categoryId', 'name')
+          .lean(),
+        Course.countDocuments(query),
+      ]);
+    }
+
+    const items = courses.map(c => {
+      const { _id, __v, ...rest } = c as any;
+      return { id: _id.toString(), ...rest, isEnrolled: false };
+    });
+
+    return { items, total };
+  }
+
+  static async getRecommendedCourses(userId: string, page: number = 1, limit: number = 10): Promise<{ items: any[], total: number }> {
+    const db = mongoose.connection.db;
+    const uId = new mongoose.Types.ObjectId(userId);
+    let preferredCategoryIds: mongoose.Types.ObjectId[] = [];
+    let enrolledCourseIds: mongoose.Types.ObjectId[] = [];
+
+    if (db) {
+      const [enrollments, views] = await Promise.all([
+        db.collection('enrollments').find({ userId: uId }).toArray(),
+        db.collection('courseviewhistories').find({ userId: uId }).sort({ viewedAt: -1 }).limit(20).toArray()
+      ]);
+
+      enrolledCourseIds = enrollments.map(e => e.courseId);
+      
+      const cats = new Set<string>();
+      enrollments.forEach(e => {
+        // Need to join course to get category... wait, we can just fetch the courses
+      });
+      
+      // Let's get categories of enrolled courses
+      if (enrolledCourseIds.length > 0) {
+        const enrolledCourses = await Course.find({ _id: { $in: enrolledCourseIds } }).select('categoryId');
+        enrolledCourses.forEach(c => cats.add(c.categoryId.toString()));
+      }
+
+      views.forEach(v => cats.add(v.categoryId.toString()));
+      
+      preferredCategoryIds = Array.from(cats).map(id => new mongoose.Types.ObjectId(id));
+    }
+
+    const skip = (page - 1) * limit;
+
+    if (preferredCategoryIds.length > 0) {
+      const query: any = {
+        state: 'published',
+        categoryId: { $in: preferredCategoryIds },
+        _id: { $nin: enrolledCourseIds } // Exclude already enrolled
+      };
+
+      const [courses, total] = await Promise.all([
+        Course.find(query)
+          .sort({ averageRating: -1, enrollmentCount: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('instructorId', 'name email')
+          .populate('categoryId', 'name')
+          .lean(),
+        Course.countDocuments(query),
+      ]);
+
+      if (courses.length > 0) {
+        const items = courses.map(c => {
+          const { _id, __v, ...rest } = c as any;
+          return { id: _id.toString(), ...rest, isEnrolled: false };
+        });
+        return { items, total };
+      }
+    }
+
+    // Fallback to Trending if no history or no recommendations found
+    return this.getTrendingCourses(page, limit);
+  }
+
   static async listAllCourses(page: number = 1, limit: number = 10): Promise<{ items: ICourse[], total: number }> {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
