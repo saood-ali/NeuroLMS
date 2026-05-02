@@ -4,6 +4,8 @@ import { redisClient } from '../db/redis';
 import { ApiError } from '../utils/ApiError';
 
 export const createRateLimiter = (options: Partial<Options>) => {
+  const { skip: userSkip, ...restOptions } = options;
+
   return rateLimit({
     store: new RedisStore({
       // @ts-expect-error - ioredis call type discrepancy is fine here
@@ -13,7 +15,15 @@ export const createRateLimiter = (options: Partial<Options>) => {
       // Return a standard 429 response via the global error handler
       next(new ApiError(429, options.message || 'Too many requests, please try again later.'));
     },
-    ...options,
+    ...restOptions,
+    // skip must come AFTER spread so it cannot be overwritten
+    skip: async (req, res) => {
+      // Read fresh each call — dotenvx may override NODE_ENV at startup
+      const isTest = process.env.NODE_ENV === 'test';
+      if (isTest) return true;
+      if (userSkip) return await userSkip(req, res);
+      return false;
+    },
   });
 };
 

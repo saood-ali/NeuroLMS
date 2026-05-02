@@ -23,33 +23,59 @@ test('CSRF Middleware - rejects POST without token', () => {
   csrfProtection(req, res, next);
   assert.ok(nextCalledWith instanceof ApiError);
   assert.strictEqual(nextCalledWith.statusCode, 403);
-  assert.strictEqual(nextCalledWith.message, 'CSRF token missing');
+  assert.strictEqual(nextCalledWith.message, 'CSRF token or cookie missing');
 });
 
-test('CSRF Middleware - validates correct token', () => {
+test('CSRF Middleware - validates correct token and cookie hash', () => {
   let cookieVal = '';
   const res = {
     cookie: (name: string, val: string) => { cookieVal = val; return res; }
   } as unknown as Response;
-  
+
   const reqGen = {} as Request;
   const token = generateCsrfToken(reqGen, res);
 
-  const req = { 
-    method: 'POST', 
-    originalUrl: '/api/v1/user', 
-    headers: { 'x-csrf-token': token }, 
-    cookies: { '_csrf': cookieVal } 
+  const req = {
+    method: 'POST',
+    originalUrl: '/api/v1/user',
+    headers: { 'x-csrf-token': token },
+    cookies: { '_csrf': cookieVal }
   } as unknown as Request;
-  
+
   let nextError: any = null;
   let nextCalled = false;
-  const next = ((err?: any) => { 
-    nextError = err; 
+  const next = ((err?: any) => {
+    nextError = err;
     nextCalled = true;
   }) as NextFunction;
 
   csrfProtection(req, res, next);
   assert.strictEqual(nextCalled, true);
   assert.strictEqual(nextError, undefined);
+});
+
+test('CSRF Middleware - rejects tampered token with valid cookie hash', () => {
+  let cookieVal = '';
+  const res = {
+    cookie: (name: string, val: string) => { cookieVal = val; return res; }
+  } as unknown as Response;
+
+  const reqGen = {} as Request;
+  const token = generateCsrfToken(reqGen, res);
+  const tamperedToken = token.replace(/.$/, 'x');
+
+  const req = {
+    method: 'POST',
+    originalUrl: '/api/v1/user',
+    headers: { 'x-csrf-token': tamperedToken },
+    cookies: { '_csrf': cookieVal }
+  } as unknown as Request;
+
+  let nextCalledWith: any = null;
+  const next = ((err?: any) => { nextCalledWith = err; }) as NextFunction;
+
+  csrfProtection(req, res, next);
+  assert.ok(nextCalledWith instanceof ApiError);
+  assert.strictEqual(nextCalledWith.statusCode, 403);
+  assert.strictEqual(nextCalledWith.message, 'Invalid CSRF token');
 });

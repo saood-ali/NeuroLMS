@@ -9,7 +9,7 @@ const CSRF_SECRET = env.ACCESS_TOKEN_SECRET || 'fallback_csrf_secret_for_dev';
 export const generateCsrfToken = (req: Request, res: Response): string => {
   // Generate a random token
   const token = crypto.randomBytes(32).toString('hex');
-  
+
   // Create an HMAC hash of the token
   const hash = crypto
     .createHmac('sha256', CSRF_SECRET)
@@ -20,7 +20,7 @@ export const generateCsrfToken = (req: Request, res: Response): string => {
   res.cookie('_csrf', hash, {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax', // Use lax in dev for cross-origin local testing
     path: '/',
   });
 
@@ -44,7 +44,7 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction) 
   const hashFromCookie = req.cookies['_csrf'];
 
   if (!tokenFromHeader || !hashFromCookie) {
-    return next(new ApiError(403, 'CSRF token missing'));
+    return next(new ApiError(403, 'CSRF token or cookie missing'));
   }
 
   // Compute expected hash from the provided token

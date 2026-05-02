@@ -8,7 +8,7 @@
     "dev": "ts-node src/api.ts",
     "start": "node dist/api.js",
     "worker": "ts-node src/worker.ts",
-    "test": "node -r ts-node/register --test 'src/tests/**/*.test.ts'",
+    "test": "NODE_ENV=test node -r ts-node/register --test 'src/tests/**/*.test.ts'",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write ."
   },
@@ -49,6 +49,8 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.6.0",
     "@types/nodemailer": "^8.0.0",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }
