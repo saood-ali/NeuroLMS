@@ -23,6 +23,10 @@ router.use('/instructors', instructorRoutes);
 // Public category endpoints
 router.use('/categories', categoryRoutes);
 
+// Course endpoints
+import courseRoutes from './course.routes';
+router.use('/courses', courseRoutes);
+
 // Admin endpoints
 router.use('/admin', adminRoutes);
 
