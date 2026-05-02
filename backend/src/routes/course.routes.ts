@@ -3,7 +3,8 @@ import { authenticate, requireRole, requireEmailVerified, optionalAuthenticate }
 import { 
   createCourse, updateCourse, publishCourse, unpublishCourse, deleteCourse, 
   getInstructorCourses, searchCourses,
-  getFeaturedCourses, getTrendingCourses, getRecommendedCourses 
+  getFeaturedCourses, getTrendingCourses, getRecommendedCourses,
+  getCourseDetail, getCourseEnrollments
 } from '../controllers/course.controller';
 
 const router = Router();
@@ -15,6 +16,12 @@ router.get('/trending', optionalAuthenticate, getTrendingCourses);
 
 // Authenticated student routes (or general authenticated for recommendations)
 router.get('/recommendations', authenticate, getRecommendedCourses);
+
+// Authenticated (any user, but logic inside restricts to admin/instructor)
+router.get('/:id/enrollments', authenticate, getCourseEnrollments);
+
+// The generic :id route must be after specific static routes
+router.get('/:id', optionalAuthenticate, getCourseDetail);
 
 // Instructor protected routes
 router.use(authenticate, requireEmailVerified, requireRole('instructor'));

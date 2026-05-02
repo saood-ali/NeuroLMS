@@ -113,3 +113,27 @@ export const getRecommendedCourses = asyncHandler(async (req: Request, res: Resp
   res.status(200).json(new ApiResponse(result, 'Recommended courses fetched'));
 });
 
+// ─── Detail & Enrollments (T-027) ────────────────────────────────────────────
+
+export const getCourseDetail = asyncHandler(async (req: Request, res: Response) => {
+  const courseId = req.params.id as string;
+  const userId = req.user?._id?.toString();
+  const userRole = req.user?.role;
+
+  const result = await CourseService.getCourseDetail(courseId, userId, userRole);
+  res.status(200).json(new ApiResponse(result, 'Course details fetched'));
+});
+
+export const getCourseEnrollments = asyncHandler(async (req: Request, res: Response) => {
+  const courseId = req.params.id as string;
+  const userId = req.user!._id.toString();
+  const userRole = req.user!.role;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const path = req.query.path as string | undefined;
+
+  const result = await CourseService.getCourseEnrollments(courseId, userId, userRole, page, limit, path);
+  res.status(200).json(new ApiResponse(result, 'Course enrollments fetched'));
+});
+
+

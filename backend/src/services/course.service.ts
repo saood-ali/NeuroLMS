@@ -531,6 +531,100 @@ export class CourseService {
     return this.getTrendingCourses(page, limit);
   }
 
+  // ─── Detail & Enrollments (T-027) ────────────────────────────────────────────
+
+  static async getCourseDetail(courseId: string, userId?: string, userRole?: string): Promise<any> {
+    const course = await Course.findById(courseId)
+      .populate('instructorId', 'name email profile')
+      .populate('categoryId', 'name')
+      .lean();
+
+    if (!course) {
+      throw new ApiError(404, 'Course not found');
+    }
+
+    const isOwner = userId && course.instructorId && (course.instructorId as any)._id.toString() === userId;
+    const isAdmin = userRole === 'admin';
+
+    if (course.state !== 'published' && !isOwner && !isAdmin) {
+      throw new ApiError(404, 'Course not found');
+    }
+
+    let isEnrolled = false;
+
+    if (userId) {
+      const db = mongoose.connection.db;
+      if (db) {
+        const enrollment = await db.collection('enrollments').findOne({
+          userId: new mongoose.Types.ObjectId(userId),
+          courseId: new mongoose.Types.ObjectId(courseId)
+        });
+        isEnrolled = !!enrollment;
+
+        // Record view if user is a student (or general user). We can record for anyone who is auth'd.
+        if (userRole === 'student') {
+          // Fire and forget view tracking
+          const catId = (course.categoryId as any)?._id || course.categoryId;
+          db.collection('courseviewhistories').insertOne({
+            userId: new mongoose.Types.ObjectId(userId),
+            courseId: new mongoose.Types.ObjectId(courseId),
+            categoryId: new mongoose.Types.ObjectId(catId),
+            viewedAt: new Date()
+          }).catch(err => console.error('Failed to log course view:', err));
+        }
+      }
+    }
+
+    const { _id, __v, ...rest } = course as any;
+    
+    // Lectures will be added in Phase 5 (T-029).
+    return {
+      id: _id.toString(),
+      ...rest,
+      isEnrolled,
+      lectures: [] 
+    };
+  }
+
+  static async getCourseEnrollments(courseId: string, instructorId: string, userRole: string, page: number = 1, limit: number = 10, path?: string): Promise<{ items: any[], total: number }> {
+    const course = await Course.findById(courseId);
+    if (!course) {
+      throw new ApiError(404, 'Course not found');
+    }
+
+    if (userRole !== 'admin' && course.instructorId.toString() !== instructorId) {
+      throw new ApiError(404, 'Course not found'); // Hide existence to unauthorized
+    }
+
+    const db = mongoose.connection.db;
+    if (!db) throw new ApiError(500, 'Database connection error');
+
+    const skip = (page - 1) * limit;
+    const query: any = { courseId: new mongoose.Types.ObjectId(courseId) };
+    if (path) {
+      query.path = path;
+    }
+
+    const [enrollments, total] = await Promise.all([
+      db.collection('enrollments').find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
+      db.collection('enrollments').countDocuments(query)
+    ]);
+
+    // Populate user details manually since enrollments is a native collection without a Mongoose model yet
+    const userIds = enrollments.map(e => e.userId);
+    const users = await mongoose.model('User').find({ _id: { $in: userIds } }).select('name email').lean();
+    const userMap = new Map(users.map(u => [u._id.toString(), u]));
+
+    const items = enrollments.map(e => ({
+      id: e._id.toString(),
+      student: userMap.get(e.userId.toString()) || { id: e.userId.toString(), name: 'Unknown', email: 'unknown' },
+      path: e.path || 'unknown',
+      createdAt: e.createdAt
+    }));
+
+    return { items, total };
+  }
+
   static async listAllCourses(page: number = 1, limit: number = 10): Promise<{ items: ICourse[], total: number }> {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
