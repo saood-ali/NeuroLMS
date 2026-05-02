@@ -160,6 +160,80 @@ test('Course Core Endpoints (T-022)', async (t) => {
     await Course.findByIdAndUpdate(courseId, { enrollmentCount: 0 });
   });
 
+  await t.test('6. Publish Course - Rejects if 0 lectures', async () => {
+    const res = await request(app)
+      .post(`/api/v1/courses/${courseId}/publish`)
+      .set('x-csrf-token', csrfToken)
+      .set('Cookie', [csrfCookie, instructorCookie]);
+    assert.strictEqual(res.status, 400);
+    assert.ok(res.body.message.includes('1 lecture'));
+  });
+
+  await t.test('7. Publish Course - Rejects paid course without payout details', async () => {
+    // Add a fake lecture count to pass the first check
+    await Course.findByIdAndUpdate(courseId, { lectureCount: 1 });
+
+    const res = await request(app)
+      .post(`/api/v1/courses/${courseId}/publish`)
+      .set('x-csrf-token', csrfToken)
+      .set('Cookie', [csrfCookie, instructorCookie]);
+    
+    assert.strictEqual(res.status, 400);
+    assert.ok(res.body.message.includes('payout details'));
+  });
+
+  await t.test('8. Publish Course - Success (Free course)', async () => {
+    // Change to free to bypass payout check
+    await Course.findByIdAndUpdate(courseId, { pricing: 'free', priceAmount: undefined });
+
+    const res = await request(app)
+      .post(`/api/v1/courses/${courseId}/publish`)
+      .set('x-csrf-token', csrfToken)
+      .set('Cookie', [csrfCookie, instructorCookie]);
+    
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.data.state, 'published');
+  });
+
+  await t.test('9. Delete Course - Rejects published course', async () => {
+    const res = await request(app)
+      .delete(`/api/v1/courses/${courseId}`)
+      .set('x-csrf-token', csrfToken)
+      .set('Cookie', [csrfCookie, instructorCookie]);
+    assert.strictEqual(res.status, 400);
+    assert.ok(res.body.message.includes('Unpublish it first'));
+  });
+
+  await t.test('10. Unpublish Course - Success', async () => {
+    const res = await request(app)
+      .post(`/api/v1/courses/${courseId}/unpublish`)
+      .set('x-csrf-token', csrfToken)
+      .set('Cookie', [csrfCookie, instructorCookie]);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.data.state, 'draft');
+  });
+
+  await t.test('11. Delete Course - Success and checks cascade', async () => {
+    // Insert a dummy record in courseViewHistory to check cascade
+    const db = mongoose.connection.db!;
+    await db.collection('courseViewHistory').insertOne({ courseId: new mongoose.Types.ObjectId(courseId), userId: 'dummy' });
+
+    const res = await request(app)
+      .delete(`/api/v1/courses/${courseId}`)
+      .set('x-csrf-token', csrfToken)
+      .set('Cookie', [csrfCookie, instructorCookie]);
+    
+    assert.strictEqual(res.status, 200);
+
+    // Verify course deleted
+    const deletedCourse = await Course.findById(courseId);
+    assert.strictEqual(deletedCourse, null);
+
+    // Verify cascade deleted
+    const historyDoc = await db.collection('courseViewHistory').findOne({ courseId: new mongoose.Types.ObjectId(courseId) });
+    assert.strictEqual(historyDoc, null);
+  });
+
   // Cleanup
   await User.deleteMany({ email: { $in: ['instructor.course@example.com', 'student.course@example.com'] } });
   await Category.deleteMany({ name: 'Course Test Category' });

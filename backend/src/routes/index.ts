@@ -5,6 +5,7 @@ import userRoutes from './user.routes';
 import instructorRoutes from './instructor.routes';
 import categoryRoutes from './category.routes';
 import adminRoutes from './admin.routes';
+import courseRoutes from './course.routes';
 
 const router = Router();
 
@@ -23,12 +24,10 @@ router.use('/instructors', instructorRoutes);
 // Public category endpoints
 router.use('/categories', categoryRoutes);
 
-// Course endpoints
-import courseRoutes from './course.routes';
+// Course endpoints (instructor-protected)
 router.use('/courses', courseRoutes);
 
 // Admin endpoints
 router.use('/admin', adminRoutes);
 
 export default router;
-

@@ -24,3 +24,36 @@ export const updateCourse = asyncHandler(async (req: Request, res: Response) => 
   const course = await CourseService.updateCourse(user._id.toString(), id, req.body);
   res.status(200).json(new ApiResponse(course, 'Course updated'));
 });
+
+export const publishCourse = asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user || user.role !== 'instructor') {
+    throw new ApiError(403, 'Only instructors can publish courses');
+  }
+
+  const id = req.params['id'] as string;
+  const course = await CourseService.publishCourse(user._id.toString(), id);
+  res.status(200).json(new ApiResponse(course, 'Course published'));
+});
+
+export const unpublishCourse = asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user || user.role !== 'instructor') {
+    throw new ApiError(403, 'Only instructors can unpublish courses');
+  }
+
+  const id = req.params['id'] as string;
+  const course = await CourseService.unpublishCourse(user._id.toString(), id);
+  res.status(200).json(new ApiResponse(course, 'Course unpublished'));
+});
+
+export const deleteCourse = asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user;
+  if (!user || user.role !== 'instructor') {
+    throw new ApiError(403, 'Only instructors can delete courses');
+  }
+
+  const id = req.params['id'] as string;
+  await CourseService.deleteCourse(user._id.toString(), id);
+  res.status(200).json(new ApiResponse(null, 'Course deleted'));
+});

@@ -97,4 +97,98 @@ export class CourseService {
     await course.save();
     return course;
   }
+
+  static async publishCourse(instructorId: string, courseId: string): Promise<ICourse> {
+    const course = await Course.findById(courseId);
+    if (!course) {
+      throw new ApiError(404, 'Course not found');
+    }
+
+    if (course.instructorId.toString() !== instructorId) {
+      throw new ApiError(403, 'You do not have permission to publish this course');
+    }
+
+    if (course.state === 'published') {
+      return course;
+    }
+
+    if (course.lectureCount < 1) {
+      throw new ApiError(400, 'Course must have at least 1 lecture to be published');
+    }
+
+    if (course.pricing === 'paid') {
+      const User = mongoose.model('User');
+      const instructor: any = await User.findById(instructorId);
+      if (!instructor?.payoutDetails || instructor.payoutDetails.status !== 'valid') {
+        throw new ApiError(400, 'Instructor must have valid payout details to publish a paid course');
+      }
+    }
+
+    course.state = 'published';
+    course.publishedAt = new Date();
+    await course.save();
+
+    return course;
+  }
+
+  static async unpublishCourse(instructorId: string, courseId: string): Promise<ICourse> {
+    const course = await Course.findById(courseId);
+    if (!course) {
+      throw new ApiError(404, 'Course not found');
+    }
+
+    if (course.instructorId.toString() !== instructorId) {
+      throw new ApiError(403, 'You do not have permission to unpublish this course');
+    }
+
+    if (course.state !== 'published') {
+      throw new ApiError(400, 'Course is not published');
+    }
+
+    course.state = 'draft';
+    await course.save();
+
+    return course;
+  }
+
+  static async deleteCourse(instructorId: string, courseId: string): Promise<void> {
+    const course = await Course.findById(courseId);
+    if (!course) {
+      throw new ApiError(404, 'Course not found');
+    }
+
+    if (course.instructorId.toString() !== instructorId) {
+      throw new ApiError(403, 'You do not have permission to delete this course');
+    }
+
+    if (course.state === 'published') {
+      throw new ApiError(400, 'Cannot delete a published course. Unpublish it first.');
+    }
+
+    if (course.enrollmentCount > 0) {
+      throw new ApiError(400, 'Cannot delete a course with active enrollments.');
+    }
+
+    const db = mongoose.connection.db;
+    if (!db) {
+      throw new ApiError(500, 'Database connection not established');
+    }
+
+    const cid = new mongoose.Types.ObjectId(courseId);
+
+    // Cascading deletions
+    await Promise.all([
+      db.collection('lectures').deleteMany({ courseId: cid }),
+      db.collection('lectureChunks').deleteMany({ courseId: cid }),
+      db.collection('qaHistory').deleteMany({ courseId: cid }),
+      db.collection('enrollments').deleteMany({ courseId: cid }),
+      db.collection('reviews').deleteMany({ courseId: cid }),
+      db.collection('wishlists').updateMany({}, { $pull: { courseIds: cid } } as any),
+      db.collection('lectureProgress').deleteMany({ courseId: cid }),
+      db.collection('liveClasses').deleteMany({ courseId: cid }),
+      db.collection('courseViewHistory').deleteMany({ courseId: cid }),
+    ]);
+
+    await Course.findByIdAndDelete(courseId);
+  }
 }
