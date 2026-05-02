@@ -21,6 +21,9 @@ app.use(express.urlencoded({ extended: true, limit: '16kb' }));
 app.use(cookieParser());
 app.use(mongoSanitize());
 
+import { csrfProtection } from './middlewares/csrf.middleware';
+app.use(csrfProtection);
+
 // Routes
 app.use('/api/v1', globalLimiter, routes);
 
