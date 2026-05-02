@@ -18,11 +18,14 @@ export class AuthService {
       throw new ApiError(409, 'Email already registered');
     }
 
+    // Prevent arbitrary role assignment (especially 'admin')
+    const requestedRole = data.role === 'instructor' ? 'instructor' : 'student';
+
     const user = new User({
       name: data.name,
       email: data.email,
       passwordHash: data.password,
-      role: data.role || 'student'
+      role: requestedRole
     });
 
     await user.save();
